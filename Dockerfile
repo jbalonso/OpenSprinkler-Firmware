@@ -38,4 +38,4 @@ VOLUME /data
 EXPOSE 8080
 
 #-- By default, start OS using /data for saving data/NVM/log files
-CMD [ "/OpenSprinkler/OpenSprinkler", "-d", "/data" ]
+CMD [ "/OpenSprinkler/OpenSprinkler", "-d", "/data/" ]
