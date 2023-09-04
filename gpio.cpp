@@ -190,20 +190,6 @@ byte digitalReadExt(byte pin) {
 #define BUFFER_MAX 64
 #define GPIO_MAX	 64
 
-// GPIO file descriptors
-static int sysFds[GPIO_MAX] = {
-	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-} ;
-
-// Interrupt service routine functions
-static void (*isrFunctions [GPIO_MAX])(void);
-
-static volatile int		 pinPass = -1 ;
-static pthread_mutex_t pinMutex ;
-
 /** Export gpio pin */
 static byte GPIOExport(int pin) {
 	char buffer[BUFFER_MAX];
@@ -240,22 +226,6 @@ static byte GPIOUnexport(int pin) {
 }
 #endif
 
-/** Set interrupt edge mode */
-static byte GPIOSetEdge(int pin, const char *edge) {
-	char path[BUFFER_MAX];
-	int fd;
-
-	snprintf(path, BUFFER_MAX, "/sys/class/gpio/gpio%d/edge", pin);
-
-	fd = open(path, O_WRONLY);
-	if (fd < 0) {
-		DEBUG_PRINTLN("failed to open gpio edge for writing");
-		return 0;
-	}
-	write(fd, edge, strlen(edge)+1);
-	close(fd);
-	return 1;
-}
 
 /** Set pin mode, in or out */
 void pinMode(int pin, byte mode) {
@@ -348,100 +318,12 @@ void digitalWrite(int pin, byte value) {
 	}
 	gpio_write(fd, value);
 	close(fd);
-}
 
-static int HiPri (const int pri) {
-	struct sched_param sched ;
-
-	memset (&sched, 0, sizeof(sched)) ;
-
-	if (pri > sched_get_priority_max (SCHED_RR))
-		sched.sched_priority = sched_get_priority_max (SCHED_RR) ;
-	else
-		sched.sched_priority = pri ;
-
-	return sched_setscheduler (0, SCHED_RR, &sched) ;
-}
-
-static int waitForInterrupt (int pin, int mS)
-{
-	int fd, x ;
-	uint8_t c ;
-	struct pollfd polls ;
-
-	if((fd=sysFds[pin]) < 0)
-		return -2;
-
-	polls.fd		 = fd ;
-	polls.events = POLLPRI ;			// Urgent data!
-
-	x = poll (&polls, 1, mS) ;
-// Do a dummy read to clear the interrupt
-//			A one character read appars to be enough.
-//			Followed by a seek to reset it.
-
-	(void)read (fd, &c, 1);
-	lseek (fd, 0, SEEK_SET);
-
-	return x ;
-}
-
-static void *interruptHandler (void *arg) {
-	int myPin ;
-
-	(void) HiPri (55) ;  // Only effective if we run as root
-
-	myPin		= pinPass ;
-	pinPass = -1 ;
-
-	for (;;)
-		if (waitForInterrupt (myPin, -1) > 0)
-			isrFunctions[myPin]() ;
-
-	return NULL ;
 }
 
 #include "utils.h"
-/** Attach an interrupt function to pin */
-void attachInterrupt(int pin, const char* mode, void (*isr)(void)) {
-	if((pin<0)||(pin>GPIO_MAX)) {
-		DEBUG_PRINTLN("pin out of range");
-		return;
-	}
 
-	// set pin to INPUT mode and set interrupt edge mode
-	pinMode(pin, INPUT);
-	GPIOSetEdge(pin, mode);
-
-	char path[BUFFER_MAX];
-	snprintf(path, BUFFER_MAX, "/sys/class/gpio/gpio%d/value", pin);
-
-	// open gpio file
-	if(sysFds[pin]==-1) {
-		if((sysFds[pin]=open(path, O_RDWR))<0) {
-			DEBUG_PRINTLN("failed to open gpio value for reading");
-			return;
-		}
-	}
-
-	int count, i;
-	char c;
-	// clear any pending interrupts
-	ioctl (sysFds[pin], FIONREAD, &count) ;
-	for (i=0; i<count; i++)
-		read (sysFds[pin], &c, 1) ;
-
-	// record isr function
-	isrFunctions[pin] = isr;
-
-	pthread_t threadId ;
-	pthread_mutex_lock (&pinMutex) ;
-		pinPass = pin ;
-		pthread_create (&threadId, NULL, interruptHandler, NULL) ;
-		while (pinPass != -1)
-			delay(1) ;
-	pthread_mutex_unlock (&pinMutex) ;
-}
+void attachInterrupt(int pin, const char* mode, void (*isr)(void)) {}
 #else
 
 void pinMode(int pin, byte mode) {}
