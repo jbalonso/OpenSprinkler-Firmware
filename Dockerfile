@@ -13,7 +13,7 @@ RUN mkdir /raspi-gpio && cd /raspi-gpio && git clone --depth 1 https://github.co
 FROM base as os-build
 
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y bash g++ make libmosquittopp-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y bash g++ make libgpiod-dev libmosquittopp-dev && rm -rf /var/lib/apt/lists/*
 COPY . /OpenSprinkler
 RUN cd /OpenSprinkler && make
 
@@ -22,7 +22,7 @@ RUN cd /OpenSprinkler && make
 FROM base
 
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y libstdc++6 libmosquittopp1 && rm -rf /var/lib/apt/lists/* \
+RUN apt-get update && apt-get install -y libstdc++6 libgpiod2 libmosquittopp1 && rm -rf /var/lib/apt/lists/* \
     && \
     mkdir /OpenSprinkler && \
     mkdir -p /data/logs
